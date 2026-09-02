@@ -1,0 +1,4 @@
+dependencies:
+  simple-radio:
+    git: https://github.com/RoboticsBrno/Esp32-simple-radio.git
+    version: v2.1.2
