@@ -29,9 +29,9 @@ radio jamming.
 ## Numeric conventions
 
 Multi-byte numbers are little-endian. Unsigned integers are `u8`, `u16`, and
-`u32`; signed integers use two's complement (`i8`, `i32`). Bits are numbered
-from the least-significant bit, so bit 0 has mask `0x01`. A nonce is not a
-number: it is exactly eight random bytes.
+`u32`; signed integers use two's complement (`i8`, `i16`, `i32`). Bits are
+numbered from the least-significant bit, so bit 0 has mask `0x01`. A nonce is
+not a number: it is exactly eight random bytes.
 
 ## Packet envelope
 
@@ -123,35 +123,14 @@ with an invalid length rejects the whole packet. Types `0x01-0x3f` are core,
 
 ## Control payload (`CONTROL`)
 
-### `0x01` — potentiometers
+The current profile requires safety state, joystick axes, and switches.
+Potentiometers are optional and the current sender does not transmit them.
+With four joystick axes and no potentiometers, the unsecured packet is 31
+bytes.
 
-The value starts with `present_mask:u8`, followed by one `u16` for each set
-bit, in ascending channel order. Values are normalized to `0..65535`; the
-robot maps them to throttle, steering, or another function through its own
-control profile. With four potentiometers, the entry length is 9 bytes.
+### `0x01` — safety state
 
-| Bit | Mask | Channel |
-|---:|---:|---|
-| 0 | `0x01` | Potentiometer 1 |
-| 1 | `0x02` | Potentiometer 2 |
-| 2 | `0x04` | Potentiometer 3 |
-| 3 | `0x08` | Potentiometer 4 |
-| 4-7 | `0xf0` | Reserved |
-
-### `0x02` — switches
-
-The value is `present_mask:u16`, followed by `pressed_mask:u16`. A set bit in
-`pressed_mask` means pressed; a clear bit means released. Switches are state,
-not edge, values, so a lost packet cannot lose a press.
-
-| Bit | Mask | Input |
-|---:|---:|---|
-| 0-8 | `0x0001` through `0x0100` | Button 1 through Button 9 |
-| 9-15 | `0xfe00` | Reserved |
-
-### `0x03` — safety state
-
-The value length is one byte.
+The value is one byte containing `safety_flags:u8`.
 
 | Bit | Mask | Meaning |
 |---:|---:|---|
@@ -162,6 +141,30 @@ The value length is one byte.
 The robot may drive wheels only with a fresh, valid `CONTROL` packet and the
 deadman bit set. It latches an emergency stop locally; clearing it must require
 a safe local procedure or a separately designed, explicit authenticated command.
+
+### `0x02` — joystick axes
+
+The value starts with `present_mask:u8`, followed by one little-endian `i16`
+for each set bit in ascending channel order. The range is `-32768..32767`,
+with center at `0`. Bits 0-3 identify axes 1-4; bits 4-7 are reserved. The
+example uses mask `0x0f`, giving a value length of 9 bytes.
+
+### `0x03` — potentiometers (optional)
+
+The value starts with `present_mask:u8`, followed by one little-endian `u16`
+in the range `0..65535` for each set bit. Only values for set bits are present,
+in ascending channel order, so the length is `1 + 2 × popcount(present_mask)`.
+
+### `0x04` — switches
+
+The value is `present_mask:u16`, followed by `pressed_mask:u16`. A set bit in
+`pressed_mask` means pressed and must also be set in `present_mask`. Switches
+are state, not edge, values, so a lost packet cannot lose a press.
+
+| Bit | Mask | Input |
+|---:|---:|---|
+| 0-8 | `0x0001` through `0x0100` | Button 1 through Button 9 |
+| 9-15 | `0xfe00` | Reserved |
 
 ## Telemetry payload (`TELEMETRY`)
 
@@ -201,11 +204,10 @@ a safe local procedure or a separately designed, explicit authenticated command.
 
 ## Size example
 
-A control packet carrying four potentiometers, nine buttons, and the safety
-state uses 28 header bytes, an 11-byte potentiometer TLV (type, length, and
-9-byte value), a 6-byte switch TLV, a 3-byte safety TLV, and a 16-byte tag:
-64 bytes total. This is far below the
-SimpleRadio blob payload limit of 1490 bytes.
+A current-profile control packet uses 28 header bytes, a 3-byte safety TLV, an
+11-byte four-axis joystick TLV, a 6-byte switch TLV, and a 16-byte tag: 64
+bytes total. The current sender omits the optional potentiometer TLV. This is
+far below the SimpleRadio blob payload limit of 1490 bytes.
 
 ## TypeScript compatibility
 

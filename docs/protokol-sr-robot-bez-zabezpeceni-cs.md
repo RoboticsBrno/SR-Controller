@@ -95,36 +95,13 @@ rozšíření.
 
 ## Řídicí payload (`CONTROL`)
 
-### `0x01` — potenciometry
+Současný profil vyžaduje bezpečnostní stav, joystickové osy a spínače.
+Potenciometry jsou volitelné a současný sender je neposílá. Se čtyřmi
+joystickovými osami má paket 31 bajtů.
 
-Hodnota je `present_mask:u8` následovaná jedním `u16` pro každý nastavený bit,
-ve vzestupném pořadí kanálů. Hodnoty jsou normalizované do rozsahu `0..65535`.
-Robot je mapuje na plyn, řízení nebo jinou funkci podle svého profilu.
+### `0x01` — bezpečnostní stav
 
-| Bit | Maska | Kanál |
-|---:|---:|---|
-| 0 | `0x01` | Potenciometr 1 |
-| 1 | `0x02` | Potenciometr 2 |
-| 2 | `0x04` | Potenciometr 3 |
-| 3 | `0x08` | Potenciometr 4 |
-| 4-7 | `0xf0` | Rezervováno |
-
-Při všech čtyřech potenciometrech má value délku 9 bajtů: maska a čtyři
-hodnoty `u16`.
-
-### `0x02` — spínače
-
-Hodnota obsahuje `present_mask:u16`, potom `pressed_mask:u16`. Nastavený bit
-v `pressed_mask` znamená stisknuto. Spínače jsou úrovňový stav, ne událost.
-
-| Bit | Maska | Vstup |
-|---:|---:|---|
-| 0-8 | `0x0001` až `0x0100` | Tlačítko 1 až 9 |
-| 9-15 | `0xfe00` | Rezervováno |
-
-### `0x03` — bezpečnostní stav
-
-Hodnota má délku 1 bajt.
+Hodnota má délku 1 bajt a obsahuje příznaky `safety_flags:u8`.
 
 | Bit | Maska | Význam |
 |---:|---:|---|
@@ -135,6 +112,31 @@ Hodnota má délku 1 bajt.
 Robot smí pohánět kola jen při čerstvém platném `CONTROL` paketu a nastaveném
 deadman bitu. Nouzové zastavení robot západkuje; jeho zrušení má vyžadovat
 bezpečný lokální postup nebo samostatný explicitní příkaz.
+
+### `0x02` — joystickové osy
+
+Hodnota je `present_mask:u8` následovaná jedním little-endian `i16` pro každý
+nastavený bit ve vzestupném pořadí kanálů. Rozsah je `-32768..32767`, střed
+má hodnotu `0`. Bity 0-3 označují osy 1-4 a bity 4-7 jsou rezervované. Příklad
+používá masku `0x0f`, takže délka je 9 bajtů.
+
+### `0x03` — potenciometry (volitelné)
+
+Hodnota je `present_mask:u8` následovaná jedním little-endian `u16` v rozsahu
+`0..65535` pro každý nastavený bit. Přenášejí se pouze hodnoty nastavených
+bitů, ve vzestupném pořadí kanálů; délka je
+`1 + 2 × počet_nastavených_bitů`.
+
+### `0x04` — spínače
+
+Hodnota obsahuje `present_mask:u16`, potom `pressed_mask:u16`. Nastavený bit
+v `pressed_mask` znamená stisknuto a musí být také v `present_mask`. Spínače
+jsou úrovňový stav, ne událost.
+
+| Bit | Maska | Vstup |
+|---:|---:|---|
+| 0-8 | `0x0001` až `0x0100` | Tlačítko 1 až 9 |
+| 9-15 | `0xfe00` | Rezervováno |
 
 ## Telemetrický payload (`TELEMETRY`)
 
@@ -168,11 +170,10 @@ bezpečný lokální postup nebo samostatný explicitní příkaz.
 
 ## Příklad velikosti
 
-Řídicí paket se čtyřmi potenciometry, devíti tlačítky a bezpečnostním stavem
-má 11 bajtů hlavičky, 11 bajtů TLV potenciometrů (typ, délka a 9bajtová
-hodnota), 6 bajtů TLV spínačů a 3 bajty TLV bezpečnosti: celkem 31 bajtů. Je
-tedy výrazně menší než limit blob payloadu
-SimpleRadio 1490 bajtů.
+Řídicí paket současného profilu má 11 bajtů hlavičky, 3 bajty TLV
+bezpečnosti, 11 bajtů TLV čtyř joystickových os a 6 bajtů TLV spínačů: celkem
+31 bajtů. Volitelné TLV potenciometrů v něm současný sender neposílá. Paket je
+výrazně menší než limit blob payloadu SimpleRadio 1490 bajtů.
 
 ## Kompatibilita s TypeScriptem
 

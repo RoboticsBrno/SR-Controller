@@ -1,7 +1,8 @@
 # SR protocol examples
 
 `sr-protocol-sender` is a controller-side ESP-IDF project. It sends a neutral
-four-potentiometer control state at 50 Hz and logs robot telemetry.
+four-axis joystick control state at 50 Hz and logs robot telemetry. Its
+31-byte CONTROL packet omits the optional potentiometer TLV.
 
 `sr-protocol-receiver` is a robot-side ESP-IDF project. It validates and logs
 control packets, reports simulated telemetry at 10 Hz, and reports failsafe

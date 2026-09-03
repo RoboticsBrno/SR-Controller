@@ -27,7 +27,8 @@ extern "C" void app_main() {
     });
 
     uint32_t sequence = 0;
-    const sr_protocol::Control state{kControllerId, kRobotId, 0, {32768, 32768, 32768, 32768}, 0, 0};
+    const sr_protocol::Control state{kControllerId, kRobotId, 0,
+                                     {0, 0, 0, 0}, 0, 0, 0, {}};
     while (true) {
         auto control = state;
         control.sequence = sequence++;

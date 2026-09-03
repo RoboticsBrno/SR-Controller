@@ -1,0 +1,31 @@
+dependencies:
+  idf:
+    source:
+      type: idf
+    version: 6.0.2
+  jef-sure/dgx:
+    component_hash: 554e7e8b129b8928b6f727713bb852c19e4b4dccb0a27615fa046d36b4519418
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 0.0.12
+  simple-radio:
+    component_hash: 9ba84aed89b1c6bfb10ae490f6e5130f7d96dfd1ac88bef0ba61a2091f0ce2ca
+    dependencies:
+    - name: idf
+      version: '>=5.0'
+    source:
+      git: https://github.com/RoboticsBrno/Esp32-simple-radio.git
+      path: .
+      type: git
+    version: 6466d9f2aade8bb3c16afa6b170b5c1576ade2e9
+direct_dependencies:
+- jef-sure/dgx
+- simple-radio
+manifest_hash: 9571ee7cc9373939e6b1ce1cf6f86a3822b8139a42481a25f9225786186d4aba
+target: esp32s3
+version: 3.0.0

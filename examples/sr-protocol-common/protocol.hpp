@@ -26,9 +26,11 @@ struct Control {
     uint8_t source_id;
     uint8_t destination_id;
     uint32_t sequence;
-    std::array<uint16_t, 4> pots;
+    std::array<int16_t, 4> joystick_axes;
     uint16_t switches;
     uint8_t safety;
+    uint8_t potentiometers_present;
+    std::array<uint16_t, 8> potentiometers;
 };
 
 struct Telemetry {
@@ -66,6 +68,15 @@ inline uint32_t get32(const uint8_t *in) {
     return value;
 }
 
+inline size_t bitCount(uint8_t value) {
+    size_t count = 0;
+    while (value != 0) {
+        count += value & 1;
+        value >>= 1;
+    }
+    return count;
+}
+
 inline void writeHeader(uint8_t *out, PacketType type, uint8_t source,
                         uint8_t destination, uint32_t sequence) {
     out[0] = 'S';
@@ -91,35 +102,38 @@ makeControl(const Control &control) {
     writeHeader(packet.data(), PacketType::Control, control.source_id,
                 control.destination_id, control.sequence);
     size_t offset = kHeaderSize;
-    // TLV 0x01: all four potentiometers, normalized to 0..65535.
+    // TLV 0x01: deadman and emergency-stop state bits.
     packet[offset++] = 0x01;
+    packet[offset++] = 1;
+    packet[offset++] = static_cast<uint8_t>(control.safety & 0x03);
+    // TLV 0x02: all four joystick axes, normalized to -32768..32767.
+    packet[offset++] = 0x02;
     packet[offset++] = 9;
     packet[offset++] = 0x0f;
-    for (uint16_t pot : control.pots) {
-        put16(packet.data() + offset, pot);
+    for (int16_t axis : control.joystick_axes) {
+        put16(packet.data() + offset, static_cast<uint16_t>(axis));
         offset += 2;
     }
-    // TLV 0x02: present and pressed bitmasks for nine switches.
-    packet[offset++] = 0x02;
+    // TLV 0x03 (potentiometers) is optional and this sender omits it.
+    // TLV 0x04: present and pressed bitmasks for nine switches.
+    packet[offset++] = 0x04;
     packet[offset++] = 4;
     put16(packet.data() + offset, 0x01ff);
     offset += 2;
     put16(packet.data() + offset,
           static_cast<uint16_t>(control.switches & 0x01ff));
     offset += 2;
-    // TLV 0x03: deadman and emergency-stop state bits.
-    packet[offset++] = 0x03;
-    packet[offset++] = 1;
-    packet[offset++] = static_cast<uint8_t>(control.safety & 0x03);
     return packet;
 }
 
 inline bool parseControl(std::span<const uint8_t> packet, Control &out) {
     if (!validHeader(packet, PacketType::Control))
         return false;
-    Control result{packet[5], packet[6], get32(packet.data() + 7), {}, 0, 0};
+    Control result{packet[5], packet[6], get32(packet.data() + 7), {},
+                   0,         0,         0,                        {}};
     size_t offset = kHeaderSize;
-    bool pots = false, switches = false, safety = false;
+    bool safety = false, joystick_axes = false, potentiometers = false,
+         switches = false;
     while (offset < packet.size()) {
         // Each entry is type, length, value. Bounds checks make malformed blobs
         // safe.
@@ -130,28 +144,48 @@ inline bool parseControl(std::span<const uint8_t> packet, Control &out) {
             return false;
         const uint8_t *value = packet.data() + offset;
         if (type == 0x01) {
-            if (pots || length != 9 || value[0] != 0x0f)
-                return false;
-            for (size_t i = 0; i < result.pots.size(); ++i)
-                result.pots[i] = get16(value + 1 + 2 * i);
-            pots = true;
-        } else if (type == 0x02) {
-            if (switches || length != 4 || get16(value) != 0x01ff ||
-                (get16(value + 2) & ~0x01ff))
-                return false;
-            result.switches = get16(value + 2);
-            switches = true;
-        } else if (type == 0x03) {
             if (safety || length != 1 || (value[0] & 0xfc))
                 return false;
             result.safety = value[0];
             safety = true;
+        } else if (type == 0x02) {
+            if (joystick_axes || length < 1 || (value[0] & 0xf0) ||
+                length != 1 + 2 * bitCount(value[0]))
+                return false;
+            size_t value_offset = 1;
+            for (size_t i = 0; i < result.joystick_axes.size(); ++i) {
+                if (value[0] & (1U << i)) {
+                    result.joystick_axes[i] = static_cast<int16_t>(
+                        get16(value + value_offset));
+                    value_offset += 2;
+                }
+            }
+            joystick_axes = true;
+        } else if (type == 0x03) {
+            if (potentiometers || length < 1 ||
+                length != 1 + 2 * bitCount(value[0]))
+                return false;
+            result.potentiometers_present = value[0];
+            size_t value_offset = 1;
+            for (size_t i = 0; i < result.potentiometers.size(); ++i) {
+                if (value[0] & (1U << i)) {
+                    result.potentiometers[i] = get16(value + value_offset);
+                    value_offset += 2;
+                }
+            }
+            potentiometers = true;
+        } else if (type == 0x04) {
+            if (switches || length != 4 || get16(value) != 0x01ff ||
+                (get16(value + 2) & ~get16(value)))
+                return false;
+            result.switches = get16(value + 2);
+            switches = true;
         }
         // Unknown TLVs are deliberately skipped, preserving protocol
         // extensibility.
         offset += length;
     }
-    if (!pots || !switches || !safety)
+    if (!safety || !joystick_axes || !switches)
         return false;
     out = result;
     return true;
@@ -243,11 +277,19 @@ inline bool parseTelemetry(std::span<const uint8_t> packet, Telemetry &out) {
 
 inline void selfCheck() {
     // Small host- and device-runnable round trip check for the control codec.
-    const Control input{1, 2, 7, {1, 2, 3, 4}, 0x0101, 0x01};
+    const Control input{1, 2, 7, {-32768, -1, 0, 32767}, 0x0101, 0x01, 0, {}};
     Control output{};
     const auto packet = makeControl(input);
-    assert(packet.size() == kControlPacketSize && parseControl(packet, output));
-    assert(output.sequence == input.sequence && output.pots == input.pots &&
+    assert(packet.size() == kControlPacketSize);
+    assert(packet[kHeaderSize] == 0x01 && packet[kHeaderSize + 1] == 1);
+    assert(packet[kHeaderSize + 3] == 0x02 &&
+           packet[kHeaderSize + 7] == 0x80);
+    assert(packet[kHeaderSize + 12] == 0xff &&
+           packet[kHeaderSize + 13] == 0x7f);
+    assert(packet[kHeaderSize + 14] == 0x04);
+    assert(parseControl(packet, output));
+    assert(output.sequence == input.sequence &&
+           output.joystick_axes == input.joystick_axes &&
            output.switches == input.switches);
 }
 

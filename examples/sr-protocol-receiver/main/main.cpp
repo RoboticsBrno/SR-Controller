@@ -39,10 +39,12 @@ extern "C" void app_main() {
         last_control_us.store(esp_timer_get_time());
         deadman.store((control.safety & 0x01) != 0);
         ESP_LOGI(kTag,
-                 "control seq=%lu pot=[%u,%u,%u,%u] switches=0x%03x "
+                 "control seq=%lu joystick_axes=[%d,%d,%d,%d] "
+                 "switches=0x%03x "
                  "safety=0x%02x rssi=%d",
-                 static_cast<unsigned long>(control.sequence), control.pots[0],
-                 control.pots[1], control.pots[2], control.pots[3],
+                 static_cast<unsigned long>(control.sequence),
+                 control.joystick_axes[0], control.joystick_axes[1],
+                 control.joystick_axes[2], control.joystick_axes[3],
                  control.switches, control.safety, info.rssi);
     });
 
