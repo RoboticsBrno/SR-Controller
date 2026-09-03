@@ -1,0 +1,20 @@
+dependencies:
+  idf:
+    source:
+      type: idf
+    version: 5.2.2
+  simple-radio:
+    component_hash: 9ba84aed89b1c6bfb10ae490f6e5130f7d96dfd1ac88bef0ba61a2091f0ce2ca
+    dependencies:
+    - name: idf
+      version: '>=5.0'
+    source:
+      git: https://github.com/RoboticsBrno/Esp32-simple-radio.git
+      path: .
+      type: git
+    version: 6466d9f2aade8bb3c16afa6b170b5c1576ade2e9
+direct_dependencies:
+- simple-radio
+manifest_hash: b33f7947d38fbd3e3fd27d2d4eec03f9c62ae18daa21620987582a8125ae8090
+target: esp32s3
+version: 2.0.0
